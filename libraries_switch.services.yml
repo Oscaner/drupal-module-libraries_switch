@@ -1,0 +1,4 @@
+services:
+  plugin.manager.libraries.switcher:
+    class: Drupal\libraries_switch\LibrariesSwitchManager
+    arguments: ['@theme_handler', '@module_handler', '@cache.discovery']

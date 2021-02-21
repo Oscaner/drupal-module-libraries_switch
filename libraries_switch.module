@@ -1,0 +1,92 @@
+<?php
+
+/**
+ * @file
+ * Contains main module functions.
+ */
+
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\libraries_switch\LibrariesSwitchManager;
+use Drupal\system\Form\ThemeSettingsForm;
+
+/**
+ * Implements hook_form_system_theme_settings_alter().
+ */
+function libraries_switch_form_system_theme_settings_alter(&$form, FormStateInterface $form_state) {
+  $form_object = $form_state->getFormObject();
+
+  // Skip if no theme settings form.
+  if (!($form_object instanceof ThemeSettingsForm)) {
+    return;
+  }
+
+  // Theme name.
+  $args = $form_state->getBuildInfo()['args'] ?? [];
+  $theme = reset($args);
+
+  // Skip if the theme no-exists.
+  if (!\Drupal::service('theme_handler')->themeExists($theme)) {
+    return;
+  }
+
+  // Libraries switch definitions.
+  /** @var \Drupal\libraries_switch\LibrariesSwitchManager $libraries_switcher */
+  $definitions = \Drupal::service('plugin.manager.libraries.switcher')->getDefinition(NULL, FALSE, $theme);
+
+  // Form.
+  $form[LibrariesSwitchManager::KEY] = [
+    '#type' => 'details',
+    '#title' => t('Libraries switch'),
+    '#callapsible' => TRUE,
+    '#collapsed' => FALSE,
+    '#open' => TRUE,
+  ];
+
+  if ($definitions) {
+    array_walk($definitions, function (&$value, $key) {
+      $value = $value['name'] ?? $key;
+    });
+
+    $form[LibrariesSwitchManager::KEY][LibrariesSwitchManager::KEY] = [
+      '#type' => 'checkboxes',
+      '#title' => t('Libraries'),
+      '#options' => $definitions,
+      '#default_value' => theme_get_setting(LibrariesSwitchManager::KEY, $theme) ?: [],
+      '#parents' => [LibrariesSwitchManager::KEY]
+    ];
+  }
+  else {
+    $form[LibrariesSwitchManager::KEY][LibrariesSwitchManager::KEY] = [
+      '#type' => 'container',
+      '#title' => t('Libraries'),
+      'content' => [
+        '#type' => 'markup',
+        '#markup' => t('No options'),
+      ],
+    ];
+  }
+}
+
+/**
+ * Implements hook_library_info_alter().
+ */
+function libraries_switch_library_info_alter(&$libraries, $extension) {
+  // Just handle theme.
+  if (!\Drupal::service('theme_handler')->themeExists($extension)) {
+    return;
+  }
+
+  $libraries = $libraries + \Drupal::service('plugin.manager.libraries.switcher')->getActiveLibraries($extension);
+}
+
+/**
+ * Implements hook_page_attachments_alter().
+ */
+function libraries_switch_page_attachments_alter(array &$attachments) {
+  // Attach libraries used by this theme.
+  $active_theme = \Drupal::theme()->getActiveTheme();
+  $libraries = \Drupal::service('plugin.manager.libraries.switcher')->getActiveLibraries($active_theme->getName());
+  foreach (array_keys($libraries) as $library) {
+    $attachments['#attached']['library'][] = $active_theme->getName() . '/' . $library;
+  }
+}
